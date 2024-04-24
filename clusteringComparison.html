@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>K-means and DBSCAN Clustering Comparison</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+  </head>
+  <body>
+    <div style="display: flex">
+      <div id="dbscanPlot" style="width: 600px; height: 600px"></div>
+      <div id="kmeansPlot" style="width: 600px; height: 600px"></div>
+    </div>
+
+    <script>
+      function generateRandomPoints(numPoints) {
+        const points = []
+        for (let i = 0; i < numPoints; i++) {
+          points.push([Math.random() * 10, Math.random() * 10])
+        }
+        return points
+      }
+      function euclidean(p1, p2) {
+        return Math.sqrt((p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2)
+      }
+      // K-means clustering
+      function kmeans(data, k, iters = 100) {
+        let centroids = data.slice(0, k).map((el) => [...el])
+        let clusters = new Array(k).fill(0).map(() => [])
+
+        for (let iter = 0; iter < iters; iter++) {
+          // Create clusters
+          clusters = new Array(k).fill(0).map(() => [])
+          console.log(clusters)
+          // Assign points to the nearest centroid
+          data.forEach((point) => {
+            const distances = centroids.map((centroid) => {
+              return euclidean(centroid, point)
+            })
+            const closest = distances.indexOf(Math.min(...distances))
+            clusters[closest].push(point)
+          })
+
+          // Recalculate centroids
+          centroids = centroids.map((centroid, idx) => {
+            if (clusters[idx].length === 0) return centroid
+            const sums = clusters[idx].reduce((acc, curr) => [acc[0] + curr[0], acc[1] + curr[1]], [0, 0])
+            return [sums[0] / clusters[idx].length, sums[1] / clusters[idx].length]
+          })
+        }
+
+        return clusters
+      }
+
+      function plotClusters(plotDivId, data, clusters, noise, title) {
+        const traces = clusters.map((cluster, index) => ({
+          x: cluster.map((point) => point[0]),
+          y: cluster.map((point) => point[1]),
+          mode: 'markers',
+          type: 'scatter',
+          name: `Cluster ${index + 1}`
+        }))
+
+        if (noise && noise.length > 0) {
+          traces.push({
+            x: noise.map((point) => point[0]),
+            y: noise.map((point) => point[1]),
+            mode: 'markers',
+            type: 'scatter',
+            name: 'Noise',
+            marker: { color: 'grey' }
+          })
+        }
+
+        const layout = {
+          title: title,
+          xaxis: { title: 'X Axis' },
+          yaxis: { title: 'Y Axis' },
+          showlegend: true
+        }
+
+        Plotly.newPlot(plotDivId, traces, layout)
+      }
+
+      const data = generateRandomPoints(100)
+      const k = 3 // Number of clusters for k-means
+      const kMeansClusters = kmeans(data, k)
+      plotClusters('kmeansPlot', data, kMeansClusters, null, 'K-means Clustering')
+
+      // // DBSCAN implementation, reusing `euclidean` function
+      // function dbscan(data, eps, minPts) {
+      //     let clusters = [], noise = [];
+      //     let visited = new Array(data.length).fill(false);
+      //     let status = new Array(data.length).fill(0); // 0: unvisited, 1: noise, 2: in cluster
+
+      //     function regionQuery(p) {
+      //         let neighbors = [];
+      //         for (let i = 0; i < data.length; i++) {
+      //             if (euclidean(data[p], data[i]) < eps) neighbors.push(i);
+      //         }
+      //         return neighbors;
+      //     }
+
+      //     function expandCluster(p, neighbors, clusterId) {
+      //         clusters[clusterId] = clusters[clusterId] || [];
+      //         clusters[clusterId].push(data[p]);
+      //         status[p] = 2; // Mark as in cluster
+
+      //         for (let i = 0; i < neighbors.length; i++) {
+      //             let np = neighbors[i];
+      //             if (!visited[np]) {
+      //                 visited[np] = true;
+      //                 let npNeighbors = regionQuery(np);
+      //                 if (npNeighbors.length >= minPts) {
+      //                     neighbors = neighbors.concat(npNeighbors);
+      //                 }
+      //             }
+      //             if (status[np] !== 2) {
+      //                 clusters[clusterId].push(data[np]);
+      //                 status[np] = 2; // Mark as in cluster
+      //             }
+      //         }
+      //     }
+
+      //     data.forEach((point, idx) => {
+      //         if (!visited[idx]) {
+      //             visited[idx] = true;
+      //             let neighbors = regionQuery(idx);
+      //             if (neighbors.length < minPts) {
+      //                 status[idx] = 1; // Mark as noise
+      //                 noise.push(data[idx]);
+      //             } else {
+      //                 let clusterId = clusters.length;
+      //                 expandCluster(idx, neighbors, clusterId);
+      //             }
+      //         }
+      //     });
+
+      //     return { clusters, noise };
+      // }
+
+      // const dbscanResult = dbscan(data, 1, 4);
+      // plotClusters("dbscanPlot", data, dbscanResult.clusters, dbscanResult.noise, 'DBSCAN Clustering');
+    </script>
+  </body>
+</html>

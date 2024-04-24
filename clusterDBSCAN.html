@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>DBSCAN Clustering</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+</head>
+<body>
+<div id="plot" style="width:600px;height:600px;"></div>
+
+<script>
+    function euclidean(p1, p2) {
+        return Math.sqrt(Math.pow(p1[0] - p2[0], 2) + Math.pow(p1[1] - p2[1], 2));
+    }
+
+    function getNeighbors(points, pointIndex, epsilon) {
+        const neighbors = [];
+        for (let i = 0; i < points.length; i++) {
+            if (euclidean(points[pointIndex], points[i]) < epsilon) {
+                neighbors.push(i);
+            }
+        }
+        return neighbors;
+    }
+
+    function dbscan(points, epsilon, minPts) {
+        const clusters = [];
+        const noise = [];
+        const visited = new Set();
+        const clustered = new Set();
+
+        points.forEach((point, index) => {
+            if (!visited.has(index)) {
+                visited.add(index);
+                const neighbors = getNeighbors(points, index, epsilon);
+                if (neighbors.length < minPts) {
+                    noise.push(index);
+                } else {
+                    const cluster = [];
+                    clusters.push(cluster);
+                    expandCluster(points, index, neighbors, cluster, epsilon, minPts, visited, clustered);
+                }
+            }
+        });
+
+        return { clusters, noise };
+    }
+
+    function expandCluster(points, pointIndex, neighbors, cluster, epsilon, minPts, visited, clustered) {
+        cluster.push(pointIndex);
+        clustered.add(pointIndex);
+
+        let i = 0;
+        while (i < neighbors.length) {
+            const current = neighbors[i];
+            if (!visited.has(current)) {
+                visited.add(current);
+                const newNeighbors = getNeighbors(points, current, epsilon);
+                if (newNeighbors.length >= minPts) {
+                    neighbors = neighbors.concat(newNeighbors);
+                }
+            }
+            if (!clustered.has(current)) {
+                cluster.push(current);
+                clustered.add(current);
+            }
+            i++;
+        }
+    }
+
+    function generateRandomPoints(numPoints) {
+        const points = [];
+        for (let i = 0; i < numPoints; i++) {
+            points.push([Math.random() * 10, Math.random() * 10]);
+        }
+        return points;
+    }
+
+    function plotClusters(data, clusters, noise) {
+        const traces = [];
+        clusters.forEach((cluster, index) => {
+            const clusterPoints = cluster.map(i => data[i]);
+            traces.push({
+                x: clusterPoints.map(point => point[0]),
+                y: clusterPoints.map(point => point[1]),
+                mode: 'markers',
+                type: 'scatter',
+                name: `Cluster ${index + 1}`
+            });
+        });
+
+        const noisePoints = noise.map(i => data[i]);
+        if (noisePoints.length) {
+            traces.push({
+                x: noisePoints.map(point => point[0]),
+                y: noisePoints.map(point => point[1]),
+                mode: 'markers',
+                type: 'scatter',
+                name: 'Noise',
+                marker: { color: 'grey' }
+            });
+        }
+
+        Plotly.newPlot('plot', traces, { title: 'DBSCAN Clustering' });
+    }
+
+    const data = generateRandomPoints(100);
+    const { clusters, noise } = dbscan(data, 1.5, 4);
+    plotClusters(data, clusters, noise);
+
+</script>
+</body>
+</html>

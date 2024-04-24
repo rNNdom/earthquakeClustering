@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Map of Chile - Filtered Earthquake Data</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+  </head>
+  <body>
+    <div style="padding: 20px">
+      <label>Min Magnitude: <input type="number" id="min-mag" value="2.5" step="0.1" /></label>
+      <label>Max Magnitude: <input type="number" id="max-mag" value="10.0" step="0.1" /></label>
+      <label>Start Date: <input type="date" id="start-date" value="1900-01-01" /></label>
+      <label>End Date: <input type="date" id="end-date" value="2024-04-01" /></label>
+      <button onclick="applyFilters()">Apply</button>
+    </div>
+    <div id="map" style="width: 100%; height: 832px"></div>
+    <!-- Updated height here -->
+    <script>
+      var map = L.map('map', {
+        preferCanvas: true
+      }).setView([-35.6751, -71.543], 5)
+
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: 'OpenStreetMap contributors'
+      }).addTo(map)
+
+      var allData = [] // Array to hold all earthquake data
+      var markers = L.layerGroup().addTo(map) // Layer group to manage markers
+
+      //   function euclidean(p1, p2) {
+      //     return Math.sqrt((p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2)
+      //   }
+
+      //function to calculate the distance between two points on earth-like surfaces
+      function haversine(p1, p2) {
+        const [lat1, lon1, mag1, time1] = p1
+        const [lat2, lon2, mag2, time2] = p2
+        const R = 6371 // Radius of the Earth in kilometers
+        const dLat = ((lat2 - lat1) * Math.PI) / 180 // Convert degrees to radians
+        const dLon = ((lon2 - lon1) * Math.PI) / 180
+        const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) * Math.sin(dLon / 2)
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+        const d = R * c // Distance in kilometers
+        return d
+      }
+      // K-means clustering
+      function kmeans(data, k, iters = 3) {
+        //pick k random index items from data to be the initial centroids
+        let indexes = Array.from({ length: k }, () => Math.floor(Math.random() * data.length))
+
+        let centroids = indexes.map((index) => [...data[index]])
+
+        let clusters = new Array(k).fill(0).map(() => [])
+
+        for (let iter = 0; iter < iters; iter++) {
+          // Create clusters
+
+          clusters = new Array(k).fill(0).map(() => [])
+
+          data.forEach((point) => {
+            //creates an array of distances from each point to each centroid
+            const distances = centroids.map((centroid) => {
+              return haversine(centroid, point)
+            })
+
+            //finds the index of the minimum distance
+            const closest = distances.indexOf(Math.min(...distances))
+            //adds it to the corresponding cluster
+            clusters[closest].push(point)
+          })
+
+          // Recalculate centroids
+          centroids = centroids.map((centroid, idx) => {
+            if (clusters[idx].length === 0) return centroid
+            const sums = clusters[idx].reduce((acc, curr) => [acc[0] + curr[0], acc[1] + curr[1]], [0, 0])
+            return [sums[0] / clusters[idx].length, sums[1] / clusters[idx].length]
+          })
+        }
+        return clusters
+      }
+
+      function plotData() {
+        Papa.parse('earthquakes.csv', {
+          download: true,
+          header: true,
+          dynamicTyping: true,
+          complete: function (results) {
+            allData = results.data
+            displayData() // Initially display data
+          }
+        })
+      }
+
+      function displayData() {
+        markers.clearLayers() // Clear existing markers
+        var coordinates = allData.map(function (item) {
+          return [item.latitude, item.longitude, item.mag, item.time]
+        })
+
+        // Cluster the coordinates
+        var clusteredData = kmeans(coordinates, 4)
+        // Plot clustered data
+        const colors = ['#ff7800', '#00ff00', '#0000ff', '#ffff00'] // Define colors for clusters
+
+        clusteredData.forEach(function (cluster, index) {
+          // make points of each cluster a different color
+          cluster.forEach(function (point) {
+            if (point[0] && point[1] && passesFilters(point)) {
+              L.circleMarker([point[0], point[1]], {
+                radius: 3,
+                fillColor: colors[index],
+                color: '#000',
+                weight: 1,
+                opacity: 1,
+                fillOpacity: 0.8
+              }).addTo(markers)
+            }
+          })
+        })
+        // console.log(markers.getLayers().map((layer) => layer.getLatLng()))
+      }
+
+      function passesFilters(item) {
+        var minMag = parseFloat(document.getElementById('min-mag').value)
+        var maxMag = parseFloat(document.getElementById('max-mag').value)
+        var startDate = new Date(document.getElementById('start-date').value)
+        var endDate = new Date(document.getElementById('end-date').value)
+        var itemDate = new Date(item.time)
+
+        return item[2] >= minMag && item[2] <= maxMag && item[3] >= startDate && item[3] <= endDate
+      }
+
+      function applyFilters() {
+        displayData() // Re-display data with new filters
+      }
+
+      plotData()
+    </script>
+  </body>
+</html>
