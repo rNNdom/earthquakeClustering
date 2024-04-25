@@ -45,39 +45,63 @@
         return d
       }
       // K-means clustering
-      function kmeans(data, k, iters = 3) {
-        //pick k random index items from data to be the initial centroids
+      function kmeans(data, k, iters = 20) {
+        // Pick k random index items from data to be the initial centroids where im going to build clusters from
         let indexes = Array.from({ length: k }, () => Math.floor(Math.random() * data.length))
-
         let centroids = indexes.map((index) => [...data[index]])
-
+        let noise = []
         let clusters = new Array(k).fill(0).map(() => [])
 
-        for (let iter = 0; iter < iters; iter++) {
-          // Create clusters
+        // Keep track of points that changed clusters in the previous iteration
+        let changedPoints = new Set()
 
+        // Iterate until convergence or maximum iterations reached
+        let converged = false
+        for (let iter = 0; iter < iters && !converged; iter++) {
+          // Reset clusters and noise
           clusters = new Array(k).fill(0).map(() => [])
-
+          noise = []
+          // Flag to track if centroids remain unchanged
+          let centroidsChanged = false
           data.forEach((point) => {
-            //creates an array of distances from each point to each centroid
+            // Check if this point changed cluster in the previous iteration
+            const shouldUpdateDistances = changedPoints.has(point)
+
+            // Creates an array of distances from n point to each centroid
             const distances = centroids.map((centroid) => {
-              return haversine(centroid, point)
+              return haversine(point, centroid)
             })
 
-            //finds the index of the minimum distance
-            const closest = distances.indexOf(Math.min(...distances))
-            //adds it to the corresponding cluster
-            clusters[closest].push(point)
-          })
+            // If the closest centroid is less than 100km away, add it to the cluster,
+            // otherwise discard it as noise
+            if (Math.min(...distances) < 100) {
+              const closestIndex = distances.indexOf(Math.min(...distances)) // find the index of the closest centroid by getting the index of the minimum distance found on the distances array
+              clusters[closestIndex].push(point)
+            } else {
+              noise.push(point)
+            }
 
-          // Recalculate centroids
-          centroids = centroids.map((centroid, idx) => {
-            if (clusters[idx].length === 0) return centroid
-            const sums = clusters[idx].reduce((acc, curr) => [acc[0] + curr[0], acc[1] + curr[1]], [0, 0])
-            return [sums[0] / clusters[idx].length, sums[1] / clusters[idx].length]
+            if (shouldUpdateDistances || (!clusters[distances.indexOf(Math.min(...distances))].includes(point) && !noise.includes(point))) {
+              centroidsChanged = true
+              changedPoints.add(point)
+              console.log(changedPoints)
+            } else {
+              changedPoints.delete(point)
+            }
           })
+          // Recalculate centroids if any point changed cluster
+          if (centroidsChanged) {
+            centroids = centroids.map((centroid, idx) => {
+              if (clusters[idx].length === 0) return centroid // the cluster is empty, so the centroid remains the same
+              const sums = clusters[idx].reduce((acc, curr) => [acc[0] + curr[0], acc[1] + curr[1]], [0, 0])
+              return [sums[0] / clusters[idx].length, sums[1] / clusters[idx].length]
+            })
+          } else {
+            converged = true // No points changed cluster, so centroids remain unchanged
+          }
         }
-        return clusters
+
+        return [clusters, noise, centroids]
       }
 
       function plotData() {
@@ -99,11 +123,11 @@
         })
 
         // Cluster the coordinates
-        var clusteredData = kmeans(coordinates, 4)
-        // Plot clustered data
-        const colors = ['#ff7800', '#00ff00', '#0000ff', '#ffff00'] // Define colors for clusters
+        var clusteredData = kmeans(coordinates, 10)
+        //create an array of colors of k length
+        const colors = Array.from({ length: 10 }, () => `#${Math.floor(Math.random() * 16777215).toString(16)}`)
 
-        clusteredData.forEach(function (cluster, index) {
+        clusteredData[0].forEach(function (cluster, index) {
           // make points of each cluster a different color
           cluster.forEach(function (point) {
             if (point[0] && point[1] && passesFilters(point)) {
@@ -113,12 +137,39 @@
                 color: '#000',
                 weight: 1,
                 opacity: 1,
-                fillOpacity: 0.8
+                fillOpacity: 1
               }).addTo(markers)
             }
           })
         })
-        // console.log(markers.getLayers().map((layer) => layer.getLatLng()))
+
+        // Plot noise
+        clusteredData[1].forEach(function (point) {
+          if (point[0] && point[1] && passesFilters(point)) {
+            L.circleMarker([point[0], point[1]], {
+              radius: 3,
+              fillColor: '#999',
+              color: '#222',
+              weight: 1,
+              opacity: 0.8,
+              fillOpacity: 0.6
+            }).addTo(markers)
+          }
+        })
+
+        // Plot centroids
+        clusteredData[2].forEach(function (centroid, index) {
+          if (centroid[0] && centroid[1]) {
+            L.circleMarker([centroid[0], centroid[1]], {
+              radius: 5,
+              fillColor: '#522FF2',
+              color: '#999',
+              weight: 1,
+              opacity: 1,
+              fillOpacity: 0.8
+            }).addTo(markers)
+          }
+        })
       }
 
       function passesFilters(item) {
